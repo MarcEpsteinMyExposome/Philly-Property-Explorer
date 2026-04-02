@@ -1,0 +1,17 @@
+{
+  "name": "philly_2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "load": "node load-data.js",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.20.0"
+  }
+}

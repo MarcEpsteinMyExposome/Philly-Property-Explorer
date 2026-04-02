@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Philly Property Explorer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242836;
+      --border: #2e3347;
+      --text: #e1e4ed;
+      --text2: #8b90a5;
+      --accent: #6c7ee1;
+      --accent-hover: #8290f0;
+      --red: #e15b5b;
+      --orange: #e1a44c;
+      --green: #4ece7a;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 20px; font-weight: 600; }
+    header span { color: var(--text2); font-size: 14px; }
+
+    .layout { display: flex; height: calc(100vh - 57px); }
+    .sidebar { width: 340px; min-width: 340px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .filters { padding: 16px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); }
+    .filters label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+    .filters input[type="text"], .filters input[type="number"] {
+      width: 100%; padding: 8px 10px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 14px; outline: none;
+    }
+    .filters input:focus { border-color: var(--accent); }
+    .row { display: flex; gap: 8px; }
+    .row > div { flex: 1; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .checkbox-row input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+    .checkbox-row label { font-size: 13px; color: var(--text); text-transform: none; letter-spacing: 0; cursor: pointer; }
+    button.search-btn {
+      padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s;
+    }
+    button.search-btn:hover { background: var(--accent-hover); }
+    .results-info { padding: 10px 16px; font-size: 13px; color: var(--text2); border-bottom: 1px solid var(--border); }
+    .results-list { flex: 1; overflow-y: auto; }
+    .result-row {
+      padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer;
+      display: flex; align-items: center; gap: 10px; transition: background 0.15s;
+    }
+    .result-row:hover { background: var(--surface2); }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-red { background: var(--red); }
+    .dot-orange { background: var(--orange); }
+    .dot-green { background: var(--green); }
+    .result-info { flex: 1; min-width: 0; }
+    .result-addr { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
+    .result-value { font-size: 13px; font-weight: 500; color: var(--accent); text-align: right; white-space: nowrap; }
+
+    .main-area { flex: 1; display: flex; flex-direction: column; }
+    #map { flex: 1; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      z-index: 2000; justify-content: center; align-items: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      width: 720px; max-height: 85vh; overflow-y: auto; padding: 24px; position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 12px; right: 16px; background: none; border: none;
+      color: var(--text2); font-size: 24px; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal h2 { font-size: 18px; margin-bottom: 16px; }
+    .modal h3 { font-size: 14px; color: var(--accent); margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
+    .detail-item label { font-size: 11px; color: var(--text2); text-transform: uppercase; }
+    .detail-item div { font-size: 14px; margin-top: 2px; }
+    table.detail-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+    table.detail-table th { text-align: left; color: var(--text2); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    table.detail-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+
+    .street-view-container { margin-bottom: 8px; }
+    .street-view-link { font-size: 13px; color: var(--accent); text-decoration: none; }
+    .street-view-link:hover { color: var(--accent-hover); text-decoration: underline; }
+    .loading { display: none; text-align: center; padding: 24px; color: var(--text2); }
+    .loading.active { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Philly Property Explorer</h1>
+    <span>Philadelphia Open Data</span>
+  </header>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="filters">
+        <div>
+          <label>Address</label>
+          <input type="text" id="f-address" placeholder="e.g. BROAD ST">
+        </div>
+        <div>
+          <label>Zip Code</label>
+          <input type="text" id="f-zip" placeholder="e.g. 19139" maxlength="5">
+        </div>
+        <div class="row">
+          <div><label>Min Value</label><input type="number" id="f-minval" placeholder="0"></div>
+          <div><label>Max Value</label><input type="number" id="f-maxval" placeholder="Any"></div>
+        </div>
+        <div class="row">
+          <div><label>Year Built Min</label><input type="number" id="f-minyear" placeholder="1700"></div>
+          <div><label>Year Built Max</label><input type="number" id="f-maxyear" placeholder="2026"></div>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="f-delinquent">
+          <label for="f-delinquent">Tax delinquent only</label>
+        </div>
+        <button class="search-btn" onclick="doSearch()">Search</button>
+      </div>
+      <div class="results-info" id="results-info"></div>
+      <div class="loading" id="loading">Searching...</div>
+      <div class="results-list" id="results-list"></div>
+    </div>
+    <div class="main-area">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Map init
+    const map = L.map('map').setView([39.9526, -75.1652], 12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      maxZoom: 19,
+    }).addTo(map);
+
+    let markers = L.layerGroup().addTo(map);
+
+    function esc(s) {
+      if (s == null) return '—';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+    function fmt$(v) { return v != null ? '$' + Number(v).toLocaleString() : '—'; }
+    function dotClass(row) {
+      if (row.tax_delinquent) return 'dot-red';
+      if (row.has_violations) return 'dot-orange';
+      return 'dot-green';
+    }
+    function dotColor(row) {
+      if (row.tax_delinquent) return '#e15b5b';
+      if (row.has_violations) return '#e1a44c';
+      return '#4ece7a';
+    }
+
+    async function doSearch() {
+      const params = new URLSearchParams();
+      const addr = document.getElementById('f-address').value.trim();
+      const zip = document.getElementById('f-zip').value.trim();
+      const minVal = document.getElementById('f-minval').value;
+      const maxVal = document.getElementById('f-maxval').value;
+      const minYear = document.getElementById('f-minyear').value;
+      const maxYear = document.getElementById('f-maxyear').value;
+      const delinquent = document.getElementById('f-delinquent').checked;
+
+      if (addr) params.set('address', addr);
+      if (zip) params.set('zip', zip);
+      if (minVal) params.set('minValue', minVal);
+      if (maxVal) params.set('maxValue', maxVal);
+      if (minYear) params.set('minYear', minYear);
+      if (maxYear) params.set('maxYear', maxYear);
+      if (delinquent) params.set('delinquent', 'true');
+
+      document.getElementById('loading').classList.add('active');
+      document.getElementById('results-list').innerHTML = '';
+      document.getElementById('results-info').textContent = '';
+
+      try {
+        const res = await fetch('/api/search?' + params);
+        const data = await res.json();
+        document.getElementById('loading').classList.remove('active');
+
+        if (data.error) {
+          document.getElementById('results-info').textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        const total = data.total || 0;
+        const rows = data.rows || [];
+        const info = `${total.toLocaleString()} matching properties` +
+          (rows.length < total ? ` (showing ${rows.length} — narrow your search)` : '');
+        document.getElementById('results-info').textContent = info;
+
+        const list = document.getElementById('results-list');
+        markers.clearLayers();
+        const bounds = [];
+
+        for (const row of rows) {
+          // List item
+          const div = document.createElement('div');
+          div.className = 'result-row';
+          div.innerHTML = `
+            <div class="status-dot ${dotClass(row)}"></div>
+            <div class="result-info">
+              <div class="result-addr">${esc(row.location)}</div>
+              <div class="result-meta">${[row.zoning, row.year_built, row.zip_code].filter(Boolean).map(esc).join(' · ')}</div>
+            </div>
+            <div class="result-value">${fmt$(row.market_value)}</div>
+          `;
+          div.onclick = () => showDetail(row.parcel_number);
+          list.appendChild(div);
+
+          // Map marker
+          if (row.lat && row.lng) {
+            const c = L.circleMarker([row.lat, row.lng], {
+              radius: 5, color: dotColor(row), fillColor: dotColor(row),
+              fillOpacity: 0.8, weight: 1,
+            }).addTo(markers);
+            c.bindPopup(`<b>${esc(row.location)}</b><br>${fmt$(row.market_value)}`);
+            bounds.push([row.lat, row.lng]);
+          }
+        }
+
+        if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+      } catch (err) {
+        document.getElementById('loading').classList.remove('active');
+        document.getElementById('results-info').textContent = 'Error: ' + err.message;
+      }
+    }
+
+    async function showDetail(parcel) {
+      const res = await fetch('/api/property/' + encodeURIComponent(parcel));
+      const data = await res.json();
+      const p = data.property;
+      const el = document.getElementById('modal-content');
+
+      const hasCoords = p.lat && p.lng;
+      const svQuery = encodeURIComponent((p.location || '') + ', Philadelphia, PA ' + (p.zip_code || ''));
+
+      el.innerHTML = `
+        <h2>${esc(p.location)}</h2>
+        ${hasCoords ? `
+        <div class="street-view-container">
+          <iframe
+            src="https://maps.google.com/maps?q=${encodeURIComponent(p.lat)},${encodeURIComponent(p.lng)}&z=18&layer=c&cbll=${encodeURIComponent(p.lat)},${encodeURIComponent(p.lng)}&cbp=12,0,0,0,0&output=svembed"
+            width="100%" height="250" style="border:0; border-radius:8px; margin-bottom:8px;"
+            allowfullscreen loading="lazy"
+          ></iframe>
+          <a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(p.lat)},${encodeURIComponent(p.lng)}" target="_blank" rel="noopener" class="street-view-link">Open in Google Street View &#8599;</a>
+        </div>
+        ` : ''}
+        <h3>Property Details</h3>
+        <div class="detail-grid">
+          <div class="detail-item"><label>Parcel #</label><div>${esc(p.parcel_number)}</div></div>
+          <div class="detail-item"><label>Owner</label><div>${esc(p.owner_1)}${p.owner_2 ? ' &amp; ' + esc(p.owner_2) : ''}</div></div>
+          <div class="detail-item"><label>Market Value</label><div>${fmt$(p.market_value)}</div></div>
+          <div class="detail-item"><label>Sale Price</label><div>${fmt$(p.sale_price)}</div></div>
+          <div class="detail-item"><label>Sale Date</label><div>${p.sale_date ? new Date(p.sale_date).toLocaleDateString() : '—'}</div></div>
+          <div class="detail-item"><label>Year Built</label><div>${esc(p.year_built)}</div></div>
+          <div class="detail-item"><label>Zoning</label><div>${esc(p.zoning)}</div></div>
+          <div class="detail-item"><label>Category</label><div>${esc(p.category_code_description)}</div></div>
+          <div class="detail-item"><label>Building</label><div>${esc(p.building_code_description)}</div></div>
+          <div class="detail-item"><label>Livable Area</label><div>${p.total_livable_area ? Number(p.total_livable_area).toLocaleString() + ' sqft' : '—'}</div></div>
+          <div class="detail-item"><label>Beds / Baths</label><div>${p.number_of_bedrooms ?? '—'} / ${p.number_of_bathrooms ?? '—'}</div></div>
+          <div class="detail-item"><label>Stories</label><div>${p.number_stories ?? '—'}</div></div>
+          <div class="detail-item"><label>Ext. Condition</label><div>${esc(p.exterior_condition)}</div></div>
+          <div class="detail-item"><label>Int. Condition</label><div>${esc(p.interior_condition)}</div></div>
+          <div class="detail-item"><label>Garage Spaces</label><div>${p.garage_spaces ?? '—'}</div></div>
+          <div class="detail-item"><label>Total Area</label><div>${p.total_area ? Number(p.total_area).toLocaleString() + ' sqft' : '—'}</div></div>
+          <div class="detail-item"><label>Zip Code</label><div>${esc(p.zip_code)}</div></div>
+        </div>
+
+        <h3>Tax Delinquencies (${data.delinquencies.length})</h3>
+        ${data.delinquencies.length ? `
+          <table class="detail-table">
+            <tr><th>Total Due</th><th>Years Owed</th><th>Most Recent</th><th>Oldest</th><th>Actionable</th></tr>
+            ${data.delinquencies.map(d => `
+              <tr>
+                <td>${fmt$(d.total_due)}</td>
+                <td>${d.num_years_owed ?? '—'}</td>
+                <td>${d.most_recent_year_owed ?? '—'}</td>
+                <td>${d.oldest_year_owed ?? '—'}</td>
+                <td>${esc(d.is_actionable)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        ` : '<p style="color:var(--text2);font-size:13px">None</p>'}
+
+        <h3>Code Violations (${data.violations.length})</h3>
+        ${data.violations.length ? `
+          <table class="detail-table">
+            <tr><th>Date</th><th>Type</th><th>Description</th><th>Status</th><th>Priority</th></tr>
+            ${data.violations.map(v => `
+              <tr>
+                <td>${v.violationdate ? new Date(v.violationdate).toLocaleDateString() : '—'}</td>
+                <td>${esc(v.violationtype)}</td>
+                <td>${esc(v.violationdescription)}</td>
+                <td>${esc(v.status)}</td>
+                <td>${esc(v.prioritydesc)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        ` : '<p style="color:var(--text2);font-size:13px">None</p>'}
+      `;
+
+      document.getElementById('modal-overlay').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('active');
+    }
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+
+    // Enter key triggers search
+    document.querySelectorAll('.filters input').forEach(el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+    });
+  </script>
+</body>
+</html>
