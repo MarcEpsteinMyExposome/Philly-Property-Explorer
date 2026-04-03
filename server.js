@@ -2,13 +2,9 @@ const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
 
-const pool = new Pool({
-  host: process.env.PG_HOST || 'localhost',
-  port: parseInt(process.env.PG_PORT || '5432', 10),
-  user: process.env.PG_USER || 'brightmeld',
-  password: process.env.PG_PASSWORD || 'brightmeld',
-  database: process.env.PG_DATABASE || 'philly_explorer',
-});
+const pool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  : new Pool({ host: 'localhost', port: 5432, user: 'brightmeld', password: 'brightmeld', database: 'philly_explorer' });
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -130,5 +126,5 @@ app.get('/api/property/:parcel', async (req, res) => {
   }
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Philly Property Explorer running at http://localhost:${PORT}`));

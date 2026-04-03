@@ -2,12 +2,10 @@ const { Client } = require('pg');
 const https = require('https');
 const http = require('http');
 
-const PG_CONFIG = {
-  host: 'localhost',
-  port: 5432,
-  user: 'brightmeld',
-  password: 'brightmeld',
-};
+const DATABASE_URL = process.env.DATABASE_URL;
+const PG_CONFIG = DATABASE_URL
+  ? { connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } }
+  : { host: 'localhost', port: 5432, user: 'brightmeld', password: 'brightmeld' };
 const DB_NAME = 'philly_explorer';
 const CARTO_BASE = 'https://phl.carto.com/api/v2/sql';
 const PAGE_SIZE = 50000;
@@ -240,9 +238,9 @@ async function main() {
   console.log('Starting Philly Property Explorer data load...\n');
   const start = Date.now();
 
-  await ensureDatabase();
+  if (!DATABASE_URL) await ensureDatabase();
 
-  const client = new Client({ ...PG_CONFIG, database: DB_NAME });
+  const client = new Client(DATABASE_URL ? PG_CONFIG : { ...PG_CONFIG, database: DB_NAME });
   await client.connect();
 
   // Enable trigram extension for fuzzy search

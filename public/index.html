@@ -212,6 +212,7 @@
         const list = document.getElementById('results-list');
         markers.clearLayers();
         const bounds = [];
+        const locGroups = {};
 
         for (const row of rows) {
           // List item
@@ -228,14 +229,37 @@
           div.onclick = () => showDetail(row.parcel_number);
           list.appendChild(div);
 
-          // Map marker
+          // Collect for map grouping
           if (row.lat && row.lng) {
-            const c = L.circleMarker([row.lat, row.lng], {
-              radius: 5, color: dotColor(row), fillColor: dotColor(row),
-              fillOpacity: 0.8, weight: 1,
-            }).addTo(markers);
-            c.bindPopup(`<b>${esc(row.location)}</b><br>${fmt$(row.market_value)}`);
+            const key = `${row.lat},${row.lng}`;
+            if (!locGroups[key]) locGroups[key] = [];
+            locGroups[key].push(row);
             bounds.push([row.lat, row.lng]);
+          }
+        }
+
+        // Map markers — group stacked parcels into one marker
+        for (const [key, group] of Object.entries(locGroups)) {
+          const [lat, lng] = key.split(',').map(Number);
+          // Use worst status color for the dot
+          const worst = group.find(r => r.tax_delinquent) || group.find(r => r.has_violations) || group[0];
+          const radius = group.length > 1 ? 7 : 5;
+          const c = L.circleMarker([lat, lng], {
+            radius, color: dotColor(worst), fillColor: dotColor(worst),
+            fillOpacity: 0.8, weight: 1,
+          }).addTo(markers);
+
+          if (group.length === 1) {
+            const r = group[0];
+            c.bindPopup(`<b>${esc(r.location)}</b><br>${fmt$(r.market_value)}<br><a href="#" onclick="showDetail('${r.parcel_number}');return false;" style="color:#6c7ee1">View details</a>`);
+          } else {
+            const lines = group.map(r =>
+              `<div style="padding:3px 0;border-bottom:1px solid #333">` +
+              `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor(r)};margin-right:6px"></span>` +
+              `${esc(r.location)} — ${fmt$(r.market_value)} ` +
+              `<a href="#" onclick="showDetail('${r.parcel_number}');return false;" style="color:#6c7ee1">details</a></div>`
+            ).join('');
+            c.bindPopup(`<b>${group.length} parcels at this location</b><div style="max-height:200px;overflow-y:auto;margin-top:6px">${lines}</div>`, { maxWidth: 350 });
           }
         }
 
