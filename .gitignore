@@ -1,2 +1,4 @@
 node_modules/
 .claude/
+todo-app/
+todo-app-prompt.md
